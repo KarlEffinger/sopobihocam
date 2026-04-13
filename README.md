@@ -112,7 +112,7 @@ Deep Sleep  → Aufwachen nach sleep_interval_s Sekunden
 "C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" ^
   compile ^
   --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" ^
-  --libraries "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" ^
+  --libraries "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" ^
   --output-dir "...\Sopobihocam\build" ^
   "...\Sopobihocam"
 ```

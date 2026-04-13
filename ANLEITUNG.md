@@ -10,10 +10,10 @@
 4. Kompilieren und hochladen mit:
 
 ```
-"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --upload --port COM8 "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam"
+"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --upload --port COM8 "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam"
 ```
 
-> **Hinweis Pfade:** Auf dem zweiten Rechner `kaeff` durch `KRKL` ersetzen.
+> **Hinweis Pfade:** Auf dem zweiten Rechner `<username>` durch den eigenen Windows-Benutzernamen ersetzen.
 
 > **Hinweis:** Falls die Kamera im Deep Sleep ist, ist COM8 nicht verfügbar.  
 > Bootloader-Modus: **BOOT** gedrückt halten → **RESET** kurz drücken → **BOOT** loslassen → Upload starten.
@@ -193,10 +193,10 @@ Nach der Erstkonfiguration können neue Firmware-Versionen direkt über den Brow
 ### Firmware kompilieren
 
 ```
-"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --output-dir "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam" && del /q "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.bootloader.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.partitions.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.merged.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.elf" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.map"
+"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --output-dir "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam" && del /q "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.bootloader.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.partitions.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.merged.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.elf" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.map"
 ```
 
-> **Hinweis Pfade:** Auf dem zweiten Rechner `kaeff` durch `KRKL` ersetzen.
+> **Hinweis Pfade:** Auf dem zweiten Rechner `<username>` durch den eigenen Windows-Benutzernamen ersetzen.
 
 Die fertige Datei liegt danach unter: `build\Sopobihocam.ino.bin`
 

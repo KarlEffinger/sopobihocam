@@ -23,12 +23,12 @@ Sopobihocam (Solar Powered Bird House Camera) — ESP32-S3 CAM firmware (OV2640 
 
 Arduino IDE 2.3.5, ESP32 board package 3.3.7. Partition scheme: Default 8MB with spiffs (OTA-fähig).
 
-**Achtung:** Die Pfade enthalten `kaeff` (Haupt-Rechner). Auf dem zweiten Rechner lautet der Benutzername `KRKL` → alle `kaeff` in den Befehlen durch `KRKL` ersetzen.
+**Achtung:** Die Pfade enthalten `<username>` — bitte durch den eigenen Windows-Benutzernamen ersetzen.
 
 **Compile only** (für OTA-Upload – erzeugt nur die `.bin` im `build/`-Ordner):
 
 ```
-"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --output-dir "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam" && del /q "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.bootloader.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.partitions.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.merged.bin" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.elf" "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.map"
+"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --output-dir "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam" && del /q "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.bootloader.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.partitions.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.merged.bin" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.elf" "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam\build\*.map"
 ```
 
 Binary liegt danach unter: `build\Sopobihocam.ino.bin`
@@ -36,7 +36,7 @@ Binary liegt danach unter: `build\Sopobihocam.ino.bin`
 **Compile + USB-Upload** (nur wenn Gerät nicht im Deep Sleep, Serial Monitor geschlossen, COM8):
 
 ```
-"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --upload --port COM8 "C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam"
+"C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB" --libraries "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries" --upload --port COM8 "C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\Sopobihocam"
 ```
 
 **Note:** COM8 is not available while the device is in deep sleep. To enter bootloader mode before upload:
@@ -109,7 +109,7 @@ Single-page app hosted on Home Assistant at `/config/www/sopobihocam.html`.
 
 ### Libraries
 - `esp_camera.h`, `WiFi.h`, `WebServer.h`, `Preferences.h` (NVS), `ESPmDNS.h`, `LittleFS.h`, `Update.h` — ESP32 Arduino core 3.3.7
-- **ReadyMail 0.3.8** (Mobizt) — installed in `C:\Users\kaeff\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries`
+- **ReadyMail 0.3.8** (Mobizt) — installed in `C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries`
 
 ### Why .cpp instead of .ino for some files
 `stream_server.cpp` and `mail_sender.cpp` are deliberately `.cpp` rather than `.ino`: the Arduino preprocessor generates automatic forward declarations for `.ino` files **before** the `#include` directives, which causes types like `SMTPStatus` to be unknown. `.cpp` files are compiled without this mechanism.
