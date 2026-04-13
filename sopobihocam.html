@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOlar POwered BIrd HOuse CAM</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    h1 { color: #e94560; margin-bottom: 12px; font-size: 1.5em; }
+    #status { font-size: 0.95em; color: #aaa; min-height: 1.4em; margin-bottom: 10px; }
+    #stream { max-width: 100%; border-radius: 8px; display: none; margin-bottom: 12px; }
+    #info-bar {
+      display: none;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 0.9em;
+    }
+    #batt {
+      color: #e94560;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    #close-btn {
+      padding: 8px 20px;
+      background: #333;
+      color: #eee;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    #close-btn:hover { background: #e94560; border-color: #e94560; }
+    #sleep-setting {
+      font-size: 0.85em;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    #sleep-setting input {
+      width: 60px;
+      padding: 2px 6px;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #aaa;
+      font-size: 0.95em;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sopobihocam</h1>
+  <div id="sleep-setting">
+    Schlafintervall: <input type="number" id="sleep_ivl" value="120" min="10" max="3600"> s
+  </div>
+  <div id="status">Warte auf Kamera...</div>
+  <img id="stream" alt="Live-Stream">
+  <button id="reconnect-btn" onclick="reconnect()" style="display:none;margin-bottom:12px;padding:8px 20px;background:#e94560;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">&#x21BA; Wieder verbinden</button>
+  <div id="info-bar">
+    <span>Akku: <span id="batt">--</span> V</span>
+    <a id="config-link" href="#" target="_blank" style="color:#aaa;font-size:0.9em;text-decoration:none;">&#9881; Konfiguration</a>
+    <button id="close-btn" onclick="disconnect()">&#x2715; Verlassen</button>
+  </div>
+
+  <script>
+    var CAM_HOST = 'sopobihocam.fritz.box';   // IP oder Hostname der Kamera
+
+    var statusEl       = document.getElementById('status');
+    var streamEl       = document.getElementById('stream');
+    var infoBar        = document.getElementById('info-bar');
+    var battEl         = document.getElementById('batt');
+    var sleepIvlEl     = document.getElementById('sleep_ivl');
+    var battTimer      = null;
+    var countdownVal   = 0;
+    var countdownTimer = null;
+
+    // Gespeicherten Wert laden
+    var savedIvl = localStorage.getItem('sleep_ivl');
+    if (savedIvl) sleepIvlEl.value = savedIvl;
+    sleepIvlEl.addEventListener('change', function() {
+      localStorage.setItem('sleep_ivl', sleepIvlEl.value);
+    });
+
+    function getSleepIvl() {
+      return Math.max(10, parseInt(sleepIvlEl.value) || 120);
+    }
+
+    function startCountdown() {
+      countdownVal = getSleepIvl();
+      clearInterval(countdownTimer);
+      countdownTimer = setInterval(function() {
+        countdownVal--;
+        if (countdownVal <= 0) countdownVal = getSleepIvl();  // reset nach Ablauf
+        statusEl.textContent = 'Nächste Verbindung in spätestens ' + countdownVal + ' Sekunden';
+      }, 1000);
+      statusEl.textContent = 'Nächste Verbindung in spätestens ' + countdownVal + ' Sekunden';
+    }
+
+    function stopCountdown() {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+
+    function fetchBattery() {
+      fetch('http://' + CAM_HOST + '/battery')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { battEl.textContent = d.voltage.toFixed(2); })
+        .catch(function() {});
+    }
+
+    function disconnect() {
+      clearInterval(battTimer);
+      document.title = 'SOlar POwered BIrd HOuse CAM';
+      stopCountdown();
+      streamEl.onerror = null;
+      streamEl.src = '';
+      streamEl.style.display = 'none';
+      infoBar.style.display = 'none';
+      statusEl.textContent = 'Getrennt.';
+      document.getElementById('reconnect-btn').style.display = 'inline-block';
+    }
+
+    function reconnect() {
+      document.getElementById('reconnect-btn').style.display = 'none';
+      startCountdown();
+      tryPing();
+    }
+
+    function showStream() {
+      stopCountdown();
+      statusEl.textContent = 'Verbunden!';
+      document.title = 'live - SoPoBiHoCam';
+      streamEl.style.display = 'block';
+      streamEl.src = 'http://' + CAM_HOST + ':81/stream';
+      infoBar.style.display = 'flex';
+
+      // Config-Link setzen
+      document.getElementById('config-link').href = 'http://' + CAM_HOST;
+      // Akkustand sofort und dann alle 30s abrufen
+      fetchBattery();
+      battTimer = setInterval(fetchBattery, 30000);
+
+      streamEl.onerror = function() {
+        clearInterval(battTimer);
+        document.title = 'SOlar POwered BIrd HOuse CAM';
+        streamEl.style.display = 'none';
+        streamEl.src = '';
+        infoBar.style.display = 'none';
+        startCountdown();
+        setTimeout(tryPing, 3000);
+      };
+    }
+
+    function tryPing() {
+      fetch('http://' + CAM_HOST + ':81/jpg?' + Date.now(), {
+        signal: AbortSignal.timeout(2000)
+      })
+      .then(function(r) {
+        if (r.ok) {
+          showStream();
+        } else {
+          setTimeout(tryPing, 3000);
+        }
+      })
+      .catch(function() {
+        setTimeout(tryPing, 3000);
+      });
+    }
+
+    startCountdown();
+    tryPing();
+  </script>
+</body>
+</html>

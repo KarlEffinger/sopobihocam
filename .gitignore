@@ -1,0 +1,9 @@
+# Build-Artefakte
+build/
+
+# Systemdateien
+.DS_Store
+Thumbs.db
+
+# Claude Code lokale Einstellungen
+.claude/settings.local.json
