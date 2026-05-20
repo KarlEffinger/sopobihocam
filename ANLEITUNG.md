@@ -68,18 +68,23 @@ Die Konfigurationsseite ist in vier Tabs unterteilt. Die Tab-Leiste bleibt beim 
 
 Die angezeigte Uhrzeit zeigt die aktuell per NTP geschätzte Lokalzeit (inkl. Sommerzeit).
 
+- **Modus-Anzeige**: Zeigt den aktuellen Betriebsmodus (Täglich / Aktiv).
+- **„Zurück auf täglich"**: Schaltfläche erscheint nur im aktiven Modus. Setzt den Modus auf „täglich" zurück (Kamera wacht dann nur noch einmal pro Morgen auf).
 - **„Batteriewarnung zurücksetzen"**: Schaltfläche erscheint nur, wenn die Warnung bereits gesendet wurde. Erlaubt erneuten Versand nach dem Aufladen.
 
 ### Tab: Mail
 | Feld | Beschreibung |
 |---|---|
-| SMTP-Host | Adresse des Mailservers (z.B. `smtp.gmail.com`) |
+| SMTP-Host | Adresse des Mailservers (z.B. `smtp.strato.de`) |
 | Port | SMTP-Port (z.B. 465 für SSL) |
-| Benutzer | E-Mail-Adresse des Absenders |
+| Benutzer | E-Mail-Adresse des Absenders (= Kamerakonto, das auch auf IMAP-Befehle geprüft wird) |
 | Passwort | App-Passwort oder SMTP-Passwort |
 | Empfänger | Zieladresse für Warnungen und Status-E-Mails |
 | Schnappschuss mitsenden | JPEG-Bild als Anhang der täglichen Morgen-Mail beifügen (Standard: an) |
 | Protokoll mitsenden | Diagnoseprotokoll (`log.txt`) als Anhang der Morgen-Mail beifügen (Standard: aus) |
+| IMAP-Host | Adresse des IMAP-Servers zum Empfang von Befehlsmails (Standard: `imap.strato.de`) |
+| IMAP-Port | IMAP-Port (Standard: 993, SSL) |
+| Betreff-Befehlsstring | Text im Betreff der Befehlsmail, der den Moduswechsel auslöst (Standard: `sopobihocam:aktiv`) |
 
 - **„Verbindung testen"**: Testet SMTP-Verbindung ohne eine Mail zu senden
 
@@ -113,7 +118,33 @@ Die App:
 
 ---
 
-## 6. Betriebsablauf verstehen
+## 6. Betriebsmodi
+
+Die Kamera kennt zwei Betriebsmodi, die im NVS gespeichert werden:
+
+### Modus „Täglich" (Standard, Werkszustand)
+
+Die Kamera wacht **einmal pro Morgen** auf, sendet die Morgen-Mail, prüft das Postfach auf eine Befehlsmail und schläft dann bis zum nächsten Morgen. Kein Stream, kein Web-UI.  
+Geeignet für: Kamera ist installiert, aber noch kein Vogel eingezogen.
+
+### Modus „Aktiv"
+
+Die Kamera wacht alle `sleep_interval_s` Sekunden auf und wartet auf Browser-Verbindungen. Stream und Web-UI sind verfügbar.  
+Geeignet für: Ein Vogel baut oder brütet – du willst live zuschauen.
+
+### Umschalten täglich → aktiv (per Mail)
+
+Die tägliche Morgen-Mail enthält einen klickbaren Link **„→ Auf regelmäßiges Aufwachen umschalten"**. Anklicken öffnet das E-Mail-Programm mit vorausgefülltem Empfänger und Betreff. Mail absenden – beim nächsten Morgen-Aufwachen erkennt die Kamera den Befehl und wechselt dauerhaft auf „Aktiv".
+
+Alternativ: Eine Mail mit dem Betreff `sopobihocam:aktiv` (oder dem konfigurierten Befehlsstring) an das Kamerakonto senden.
+
+### Umschalten aktiv → täglich (per Web-UI)
+
+Im Tab **Zeitplan** erscheint im aktiven Modus der Button **„Zurück auf täglich"**. Nach dem Klick wechselt die Kamera beim nächsten Aufwachen wieder auf den täglichen Modus.
+
+---
+
+## 7. Betriebsablauf verstehen
 
 ```
 Aufwachen
@@ -123,39 +154,50 @@ Aufwachen
   │           ├─ Noch keine Warnung gesendet → WLAN → NTP → Warn-Mail → Nachtschlaf
   │           └─ Warnung bereits gesendet    → direkt Nachtschlaf (schont Akku)
   │
-  ├─ Kamera initialisieren
-  ├─ WLAN verbinden → NTP-Zeitsynchronisation
-  │     └─ Kein WLAN → AP-Hotspot öffnen
+  ├─ Modus „Täglich" (mode = 0)?
+  │     ├─ Kamera initialisieren (für Schnappschuss)
+  │     ├─ WLAN verbinden → NTP
+  │     │     └─ Kein WLAN → Nachtschlaf
+  │     ├─ Morgen-Mail senden (mit mailto-Link zum Umschalten)
+  │     ├─ IMAP prüfen: Befehlsmail vorhanden?
+  │     │     ├─ Ja → Modus auf „Aktiv" setzen → Kurzschlaf (ab jetzt aktiver Betrieb)
+  │     │     └─ Nein → Nachtschlaf bis sleep_start_h
+  │     └─ (Ende)
   │
-  ├─ Tageszeit erkannt (nach sleep_start_h)?
-  │     └─ Ja → Morgen-Status-Mail senden (einmal pro Tag, wenn konfiguriert)
-  │
-  ├─ Warten auf Browser-Client (wait_for_client_s)
-  │     ├─ Client verbindet → Stream läuft → wach bis Client trennt
-  │     └─ Kein Client → Nachtfenster prüfen:
-  │           ├─ Nacht → Nachtschlaf bis sleep_start_h
-  │           └─ Tag → Kurzschlaf (sleep_interval_s)
-  └─ (Schleife)
+  └─ Modus „Aktiv" (mode = 1)?
+        ├─ Kamera initialisieren
+        ├─ WLAN verbinden → NTP-Zeitsynchronisation
+        │     └─ Kein WLAN → AP-Hotspot öffnen
+        ├─ Tageszeit erkannt (nach sleep_start_h)?
+        │     └─ Ja → Morgen-Status-Mail senden (einmal pro Tag, wenn konfiguriert)
+        ├─ Warten auf Browser-Client (wait_for_client_s)
+        │     ├─ Client verbindet → Stream läuft → wach bis Client trennt
+        │     └─ Kein Client → Nachtfenster prüfen:
+        │           ├─ Nacht → Nachtschlaf bis sleep_start_h
+        │           └─ Tag → Kurzschlaf (sleep_interval_s)
+        └─ (Schleife)
 ```
 
 **Konfigurationsseite offen:** Der Browser sendet alle paar Sekunden einen Heartbeat-Ping – die Kamera bleibt wach, solange die Seite offen ist.
 
 ---
 
-## 7. Status-E-Mail (täglich, morgens)
+## 8. Status-E-Mail (täglich, morgens)
 
-Beim ersten Aufwachen nach der Nachtruhe (also wenn `sleep_start_h` überschritten ist) sendet die Kamera automatisch eine Mail mit:
+Beim ersten Aufwachen nach der Nachtruhe sendet die Kamera automatisch eine Mail mit:
 
 - Aktueller Akkuspannung
 - Anzahl der Stream-Verbindungen seit der letzten Mail
+- Aktuellem Betriebsmodus
+- Im täglichen Modus: klickbarer Link zum Umschalten auf „Aktiv"
 - Optional: JPEG-Schnappschuss als Anhang („Schnappschuss mitsenden" im Mail-Tab)
 - Optional: Diagnoseprotokoll als Anhang („Protokoll mitsenden" im Mail-Tab)
 
-Voraussetzung: SMTP-Zugangsdaten sind konfiguriert und WLAN ist verbunden. Bei einem Fehler wird es beim nächsten Wake automatisch erneut versucht.
+Voraussetzung: SMTP-Zugangsdaten sind konfiguriert und WLAN ist verbunden. Bei einem Fehler wird es beim nächsten Aufwachen automatisch erneut versucht.
 
 ---
 
-## 8. Diagnoseprotokoll
+## 9. Diagnoseprotokoll
 
 Alle Ereignisse werden mit Datum, Uhrzeit und Boot-Sekunden protokolliert:
 
@@ -171,7 +213,7 @@ Alle Ereignisse werden mit Datum, Uhrzeit und Boot-Sekunden protokolliert:
 
 ---
 
-## 9. RGB-LED Statusanzeige
+## 10. RGB-LED Statusanzeige
 
 | Farbe | Bedeutung |
 |---|---|
@@ -182,7 +224,7 @@ Alle Ereignisse werden mit Datum, Uhrzeit und Boot-Sekunden protokolliert:
 
 ---
 
-## 10. Firmware-Update per OTA (Over-the-Air)
+## 11. Firmware-Update per OTA (Over-the-Air)
 
 Nach der Erstkonfiguration können neue Firmware-Versionen direkt über den Browser eingespielt werden — ohne USB-Kabel.
 
@@ -213,7 +255,7 @@ Die fertige Datei liegt danach unter: `build\Sopobihocam.ino.bin`
 
 ---
 
-## 11. Bekannte Einschränkungen
+## 12. Bekannte Einschränkungen
 
 - **Deep Sleep = kein COM8**: Während die Kamera schläft, ist der serielle Port nicht verfügbar. Für einen USB-Upload muss der Bootloader-Modus manuell aktiviert werden (s. Abschnitt 1).
 - **Kein Ausschalten des Kameramoduls im Schlaf**: Das OV2640-Modul hat keinen Power-Down-Pin auf diesem Board → ~20 mA Ruhestrom auch im Deep Sleep.

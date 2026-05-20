@@ -113,6 +113,59 @@ void setup() {
     saveMailSentFlag(false);
   }
 
+  // ================================================================
+  // MODUS 0 – Täglicher Modus: einmal aufwachen, Foto + Mail senden,
+  //           IMAP prüfen, dann bis zum nächsten Morgen schlafen.
+  //           Kein Web-UI, kein Stream-Server, IR-LED bleibt aus.
+  // ================================================================
+  if (cfg.mode == 0) {
+    logLine("[BOOT] Modus 0 (täglich) – Kamera init\n");
+
+    // Kamera initialisieren (für optionalen Snapshot in Health-Mail)
+    bool cameraOk = initCamera();
+    if (!cameraOk) {
+      logLine("[BOOT] Kamera-Init fehlgeschlagen – Mail ohne Snapshot\n");
+    }
+
+    // WiFi verbinden – bei Fehler direkt in Nachtschlaf
+    if (!connectSTA(WIFI_STA_TIMEOUT_MS)) {
+      logLine("[BOOT] Modus 0: kein WiFi – Nachtschlaf\n");
+      if (cameraOk) esp_camera_deinit();
+      enterNightSleep();
+      return;
+    }
+
+    // NTP synchronisieren (für korrekte Zeitstempel und secondsUntilMorning())
+    syncNTP();
+
+    // Morgen-Health-Mail senden (einmal pro Tag, enthält mailto-Umschalt-Link)
+    logLine("[BOOT] Modus 0 – sende Health-Mail\n");
+    checkAndSendMorningHealthMail(batt_v_at_boot);
+
+    // IMAP prüfen: Befehlsmail vorhanden → auf Modus 1 (aktiv) umschalten
+    logLine("[BOOT] Modus 0 – prüfe IMAP auf Befehlsmail\n");
+    if (checkImapForCommand()) {
+      logLine("[BOOT] Modus 0 → 1: Befehlsmail empfangen, wechsle auf aktiven Modus\n");
+      cfg.mode = 1;
+      saveConfig();
+      // Kurzer DeepSleep: beim nächsten Wake startet Modus 1
+      if (cameraOk) esp_camera_deinit();
+      enterDeepSleep();
+      return;
+    }
+
+    // Kein Befehl → bis zum nächsten Morgen schlafen
+    logLine("[BOOT] Modus 0 – kein Befehl, Nachtschlaf\n");
+    if (cameraOk) esp_camera_deinit();
+    enterNightSleep();
+    return;
+  }
+
+  // ================================================================
+  // MODUS 1 – Aktiver Modus: bisheriges Verhalten (Polling, Web-UI,
+  //           Stream-Server, alle sleep_interval_s aufwachen).
+  // ================================================================
+
   // --- Kamera initialisieren ---
   // IR-LED LEDC erst nach initCamera() konfigurieren: Kamera belegt LEDC_CHANNEL_0/TIMER_0
   // (20 MHz XCLK), danach wählt ledcAttach() automatisch einen konfliktfreien Timer.

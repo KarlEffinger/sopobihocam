@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sopobihocam (Solar Powered Bird House Camera) — ESP32-S3 CAM firmware (OV2640 NoIR camera) that wakes from deep sleep every `sleep_interval_s` seconds (default 60s), waits up to `wait_for_client_s` seconds (default 15s) for a browser to connect, streams MJPEG video on demand, provides a tab-based configuration web UI, monitors battery voltage, sends warning emails via SMTP when battery is low, sends daily health-check emails with optional snapshot and log attachment, supports configurable night sleep windows, and offers OTA firmware updates via browser.
+Sopobihocam (Solar Powered Bird House Camera) — ESP32-S3 CAM firmware (OV2640 NoIR camera) with two operating modes:
+
+- **Mode 0 (daily)**: Wakes once per morning, sends a health-check email with snapshot and a mailto link to switch modes, checks IMAP inbox for a command email, then sleeps until the next morning. No web UI, no stream server. Designed for low-activity periods (no bird in nest yet).
+- **Mode 1 (active)**: Wakes every `sleep_interval_s` seconds (default 60s), waits up to `wait_for_client_s` seconds (default 15s) for a browser to connect, streams MJPEG video on demand, provides a tab-based configuration web UI.
+
+Both modes: monitor battery voltage, send warning emails via SMTP when battery is low, support configurable night sleep windows, and offer OTA firmware updates via browser.
+
+**Mode switching**: daily→active via email (reply to the mailto link in the health mail, or send any email with `cfg.imap_cmd` as subject to `cfg.mail_user`). active→daily via button in the web UI (Zeitplan tab). Mode persisted in NVS.
 
 ## Hardware
 
@@ -50,25 +57,34 @@ The firmware follows a state machine:
 BOOT → MeasureBatt
   ├─ batt low & !mail_sent → WiFi → NTP → SendMail → NightSleep (bis sleep_start_h)
   ├─ batt low &  mail_sent → NightSleep (bis sleep_start_h)
-  └─ batt OK → CameraInit → TryWiFi (STA) → NTP → HealthMail (1×/Tag) → Ready
-                                          └─ Timeout 60s → StartAP(192.168.4.1) → Ready
-Ready:
-  ├─ Serve config web UI on port 80 (STA or AP mode, 4 tabs)
-  ├─ MJPEG stream on port 81 /stream
-  ├─ JPEG snapshot on port 81 /jpg (liveness check for sopobihocam.html, web UI preview)
-  ├─ No client within wait_for_client_s + isNightTime() → NightSleep
-  ├─ No client within wait_for_client_s + !isNightTime() → DeepSleep
-  └─ Stream client connects → awake indefinitely → client disconnects → DeepSleep
+  └─ batt OK →
+       ├─ cfg.mode == 0 (täglich):
+       │    CameraInit → WiFi (STA) → NTP → HealthMail (mit mailto-Link) → IMAPCheck
+       │      ├─ Befehl gefunden → cfg.mode=1, saveConfig() → DeepSleep (kurz)
+       │      └─ kein Befehl → NightSleep (bis sleep_start_h)
+       │    WiFi-Fehler → NightSleep; Camera-Fehler → HealthMail ohne Foto → IMAPCheck → Sleep
+       │
+       └─ cfg.mode == 1 (aktiv):
+            CameraInit → TryWiFi (STA) → NTP → HealthMail (1×/Tag) → Ready
+                                     └─ Timeout 60s → StartAP(192.168.4.1) → Ready
+            Ready:
+              ├─ Serve config web UI on port 80 (STA or AP mode, 4 tabs)
+              ├─ MJPEG stream on port 81 /stream
+              ├─ JPEG snapshot on port 81 /jpg (liveness check, web UI preview)
+              ├─ No client within wait_for_client_s + isNightTime() → NightSleep
+              ├─ No client within wait_for_client_s + !isNightTime() → DeepSleep
+              └─ Stream client connects → awake indefinitely → client disconnects → DeepSleep
+
 DeepSleep → wake after sleep_interval_s seconds (default 60s)
 NightSleep → wake at sleep_start_h (default 08:00), resets health_mail_sent_today flag
 ```
 
 ### Key subsystems
-- **NVS configuration**: wifi_ssid, wifi_pass, wait_for_client_s, sleep_interval_s, batt_min_v, mail_host, mail_port, mail_user, mail_pass, mail_to, mail_sent_flag, led_brightness, sleep_start_h, sleep_end_h, mail_snapshot, mail_log
-- **Web UI**: Tab-based configuration page on port 80 (AP 192.168.4.1 or STA) with 4 tabs:
+- **NVS configuration**: wifi_ssid, wifi_pass, wait_for_client_s, sleep_interval_s, batt_min_v, mail_host, mail_port, mail_user, mail_pass, mail_to, mail_sent_flag, led_brightness, sleep_start_h, sleep_end_h, mail_snapshot, mail_log, **mode** (0=täglich/1=aktiv), **imap_host** (default: imap.strato.de), **imap_port** (default: 993), **imap_cmd** (default: sopobihocam:aktiv)
+- **Web UI**: Tab-based configuration page on port 80 (AP 192.168.4.1 or STA) with 4 tabs (only in mode 1):
   - **Kamera**: live JPEG preview (polling /jpg), IR LED brightness slider, stream URL
-  - **Zeitplan**: wait_for_client_s, sleep_interval_s, night sleep window (sleep_start_h / sleep_end_h), current NTP time display, battery voltage, batt_min_v, reset battery warning
-  - **Mail**: SMTP configuration, mail_snapshot/mail_log checkboxes, connection test
+  - **Zeitplan**: wait_for_client_s, sleep_interval_s, night sleep window (sleep_start_h / sleep_end_h), current NTP time display, battery voltage, batt_min_v, reset battery warning; **current mode display** + "Zurück auf täglich" button (only visible in mode 1, sets mode=0, saves NVS via GET /setmode?mode=0)
+  - **Mail**: SMTP configuration, mail_snapshot/mail_log checkboxes, connection test; **IMAP fields**: imap_host, imap_port, imap_cmd
   - **System**: WiFi SSID/password, log diagnostics (download/clear/size), OTA firmware update with progress bar
   - Heartbeat ping every `wait_for_client_s/3` ms keeps camera awake while config page is open
 - **Sleep logic**:
@@ -81,8 +97,9 @@ NightSleep → wake at sleep_start_h (default 08:00), resets health_mail_sent_to
 - **NTP time management** (`time_manager.ino`): NTP sync via `configTzTime()` with CET/CEST timezone. Time survives deep sleep via two RTC variables: `rtc_ntp_unix_ts` (boot-normalized UTC timestamp) + `rtc_ntp_accum_s` (accumulated seconds across sleep cycles). Formula: `getEstimatedTime() = rtc_ntp_unix_ts + rtc_ntp_accum_s + millis()/1000`. **Wichtig:** ESP32-S3 interner RC-Oszillator driftet ±5% → bei 14h Nachtschlaf bis zu 42 Minuten. `syncNTP()` setzt Systemuhr vor dem SNTP-Start auf Epoche zurück, damit `getLocalTime()` auf die echte NTP-Antwort wartet (nicht die gedriftete RTC-Zeit akzeptiert).
 - **MJPEG streaming**: Port 81 `/stream` via `esp_http_server`, adaptive pacing (delay = 100ms − tTotal; if tSend > 60ms: delay += tSend; clamped 20–500ms). Sets `streamClientConnected=true` on connect, `false` on disconnect. Increments `rtc_conn_count`.
 - **JPEG snapshot**: Port 81 `/jpg` on same httpd instance as /stream. Used for browser live preview (JS polling in web UI) and liveness check in sopobihocam.html.
-- **Mail**: SMTP warning when batt_v < batt_min_v; max 3 retries × 10s; mail_sent_flag in NVS prevents repeated sending; manual reset via web UI. SMTP connection test via web UI. Library: **ReadyMail 0.3.8** (Mobizt).
-- **Health-check mail** (`health_check.ino`): Daily status mail sent on first morning wake after sleep_start_h. Contains battery voltage + connection count. Optional JPEG snapshot attachment (`cfg.mail_snapshot`) and log file attachment (`cfg.mail_log`). RTC-persistent variables: `rtc_conn_count` (reset after successful send), `rtc_health_mail_sent_today` (reset in `prepareForNight()`). On failure: retries on next 60s wake cycle.
+- **Mail (SMTP)**: Warning when batt_v < batt_min_v; max 3 retries × 10s; mail_sent_flag in NVS prevents repeated sending; manual reset via web UI. SMTP connection test via web UI. Library: **ReadyMail 0.3.8** (Mobizt).
+- **Health-check mail** (`health_check.ino`): Daily status mail sent on first morning wake after sleep_start_h. Contains battery voltage + connection count. **HTML body** with battery voltage, connection count, current mode, and (only in mode 0) a `mailto:` link pre-filled with `cfg.imap_cmd` as subject → one click switches to active mode. Plain-text fallback always included. Optional JPEG snapshot attachment (`cfg.mail_snapshot`) and log file attachment (`cfg.mail_log`). RTC-persistent variables: `rtc_conn_count` (reset after successful send), `rtc_health_mail_sent_today` (reset in `prepareForNight()`). On failure: retries on next 60s/morning wake cycle.
+- **IMAP command receiver** (`imap_receiver.cpp`): In mode 0, after sending the health mail, connects to `cfg.imap_host:cfg.imap_port` (SSL, port 993, `ssl.setInsecure()`), authenticates with `cfg.mail_user`/`cfg.mail_pass`, selects INBOX, searches for UNSEEN messages with `cfg.imap_cmd` in subject, marks found UIDs as SEEN, returns true if found. No body fetch. On true: sets `cfg.mode=1`, calls `saveConfig()`, enters short deep sleep. IMAP credentials = same account as SMTP (Strato: imap.strato.de:993).
 - **Logger** (`logger.ino`): LittleFS ring buffer (32 KB max). Each line timestamped `[T+Xs|HH:MM:SS]` (boot seconds + NTP wall clock). Rotation: discards older half when exceeding LOG_MAX_SIZE (checked every 25 writes). HTTP endpoints: GET `/log` (download), GET `/clearlog` (delete), GET `/logsize` (JSON size). `readLogBuffer()` for mail attachment.
 - **OTA firmware update**: Browser-based upload via POST `/update` in web UI (System tab). Uses `Update.h`, progress bar in JS, auto-restart on success.
 - **Camera**: OV2640 NoIR, XCLK 20 MHz, VGA JPEG q12, fb_count=2 (PSRAM), up to 3 init attempts; on failure: warning mail + sleep. AE warmup: 5 frames × 300ms discarded. Settings: vflip=1, hmirror=1, aec2=0 (no night mode), gainceiling=4X.
@@ -112,27 +129,38 @@ Single-page app hosted on Home Assistant at `/config/www/sopobihocam.html`.
 - **ReadyMail 0.3.8** (Mobizt) — installed in `C:\Users\<username>\Nextcloud\Documents\Elektronikprojekte\Arduino\libraries`
 
 ### Why .cpp instead of .ino for some files
-`stream_server.cpp` and `mail_sender.cpp` are deliberately `.cpp` rather than `.ino`: the Arduino preprocessor generates automatic forward declarations for `.ino` files **before** the `#include` directives, which causes types like `SMTPStatus` to be unknown. `.cpp` files are compiled without this mechanism.
+`stream_server.cpp`, `mail_sender.cpp`, and `imap_receiver.cpp` are deliberately `.cpp` rather than `.ino`: the Arduino preprocessor generates automatic forward declarations for `.ino` files **before** the `#include` directives, which causes types like `SMTPStatus` or `IMAPStatus` to be unknown. `.cpp` files are compiled without this mechanism.
 
-## Current State (as of 2026-04-13)
+**Important**: `imap_receiver.cpp` defines both `#define ENABLE_SMTP` and `#define ENABLE_IMAP` because ReadyMail's IMAP internals include SMTP headers. Both `.cpp` files include `ReadyMail.h`, which defines `ReadyMailClass ReadyMail;` at line 175 as a non-inline global. This caused a linker error ("multiple definition of `ReadyMail`"). **Fix applied**: in `imap_receiver.cpp`, `#define ReadyMail _ReadyMail_imap_suppress_` is placed before the include (renames the definition to a throw-away symbol), then `#undef ReadyMail` after the include. Since `imap_receiver.cpp` never calls `ReadyMail` directly (only uses `IMAPClient`), no `extern` reference is needed. The authoritative `ReadyMail` instance lives in `mail_sender.cpp`.
+
+## Current State (as of 2026-05-20)
 
 ### Working features
-- On-demand operation: wakes every `sleep_interval_s` (default 60s), waits `wait_for_client_s` (default 15s) for browser
-- MJPEG stream on port 81 (`/stream`) + JPEG snapshot (`/jpg`) on same httpd instance
-- Tab-based web UI on port 80: Kamera (preview, IR LED), Zeitplan (timing, night sleep, battery), Mail (SMTP config, snapshot/log options), System (WiFi, log diagnostics, OTA)
-- IR LED (GPIO14, BC547): PWM brightness 0–100%, fade-in/out, stored in NVS
+- **Two operating modes** (NVS-persistent, default: mode 0):
+  - **Mode 0 (täglich)**: one wake per morning, health mail with HTML mailto-link, IMAP check, night sleep
+  - **Mode 1 (aktiv)**: wakes every `sleep_interval_s` (default 60s), waits `wait_for_client_s` (default 15s) for browser
+- MJPEG stream on port 81 (`/stream`) + JPEG snapshot (`/jpg`) on same httpd instance (mode 1 only)
+- Tab-based web UI on port 80: Kamera (preview, IR LED), Zeitplan (timing, night sleep, battery, **mode display + switch**), Mail (SMTP config, snapshot/log options, **IMAP config**), System (WiFi, log diagnostics, OTA) — mode 1 only
+- IR LED (GPIO14, BC547): PWM brightness 0–100%, fade-in/out, stored in NVS (mode 1 only, stays off in mode 0)
 - RGB LED (WS2812, GPIO48): blue=boot, green=ready (1s), red=active, bright red blink=AP mode
 - Battery measurement: GPIO3 (ADC1_CH2), `analogReadMilliVolts()` + offset 27mV + ratio 2.0143, median of 16 samples; verified 4.083V
 - NTP time sync with CET/CEST timezone, time survives deep sleep via RTC accumulator
 - Configurable night sleep window (default 22:00–08:00): long sleep until morning instead of 60s cycles
-- Daily health-check mail (first morning wake): battery voltage, connection count, optional JPEG snapshot + log attachment
+- Daily health-check mail (first morning wake): battery voltage, connection count, **HTML body with mailto link** (mode 0) or plain info (mode 1), optional JPEG snapshot + log attachment
+- **IMAP command receiver**: checks inbox for mode-switch email (mode 0 only, once per morning)
 - LittleFS logger: 32 KB ring buffer with timestamps, download/clear via web UI, attachable to health mail
-- OTA firmware update via browser upload (System tab)
+- OTA firmware update via browser upload (System tab, mode 1 only)
 - Timer-based deep sleep (short: `sleep_interval_s`, long: until `sleep_start_h`)
 - Low battery always triggers long night sleep (prevents drain through short cycles)
 - PSRAM active (fqbn option: `PSRAM=opi`)
-- ReadyMail 0.3.8: battery warning mail, health mail, SMTP connection test
+- ReadyMail 0.3.8: battery warning mail, health mail (HTML+text), SMTP connection test, **IMAP inbox check**
 - Viewer app (`sopobihocam.html`) on HA with auto-reconnect, battery display, config link
+
+### Not yet tested after last change (as of 2026-05-20)
+- IMAP connection to imap.strato.de (ReadyMail 0.3.8 IMAPClient API — verify against library headers before changing)
+
+### Fixed since initial implementation
+- **Linker error "multiple definition of `ReadyMail`"** — fixed 2026-05-20: `imap_receiver.cpp` now uses `#define ReadyMail _ReadyMail_imap_suppress_` before the include to prevent a second definition. See note in "Why .cpp" section.
 
 ### Deep sleep sequence (`shutdownAndSleep()` in sleep_manager.ino)
 1. `rgbBlinking = false` + `fadeLedOff()` — fades out IR LED and RGB indicator
@@ -163,16 +191,17 @@ Two entry points: `enterDeepSleep()` (short, `cfg.sleep_interval_s`) and `enterN
 - Camera I2C: SIOD=GPIO4, SIOC=GPIO5
 
 ### File structure
-- `Sopobihocam.ino` — main sketch: setup() state machine, loop() with sleep logic
-- `config.h` — pin definitions, constants, Config struct, extern declarations
+- `Sopobihocam.ino` — main sketch: setup() state machine (mode 0 + mode 1 branches), loop() with sleep logic
+- `config.h` — pin definitions, constants, Config struct (incl. mode/imap_* fields), extern declarations
 - `battery.ino` — ADC voltage measurement (median of 16 calibrated samples)
 - `camera_manager.ino` — OV2640 init with retries, sensor settings, AE warmup
 - `wifi_manager.ino` — STA connection, AP fallback, mDNS
 - `stream_server.cpp` — esp_http_server on port 81: /stream (MJPEG) + /jpg (snapshot)
-- `mail_sender.cpp` — ReadyMail SMTP: warning mail, health mail, connection test
+- `mail_sender.cpp` — ReadyMail SMTP: warning mail, health mail (HTML+text, mailto link), connection test; `urlEncode()` helper
+- `imap_receiver.cpp` — ReadyMail IMAP: `checkImapForCommand()` — SEARCH UNSEEN + STORE \Seen; ENABLE_SMTP + ENABLE_IMAP both defined
 - `sleep_manager.ino` — shutdownAndSleep(), enterDeepSleep(), enterNightSleep()
-- `nvs_manager.ino` — Preferences load/save for all config fields
-- `web_ui.ino` — WebServer on port 80: config page (HTML/JS), all AJAX endpoints, LED control, OTA
+- `nvs_manager.ino` — Preferences load/save for all config fields (incl. mode, imap_host, imap_port, imap_cmd)
+- `web_ui.ino` — WebServer on port 80: config page (HTML/JS), all AJAX endpoints, LED control, OTA; /setmode handler
 - `ir_led.ino` — LEDC PWM setup and duty control for IR LED
 - `time_manager.ino` — NTP sync, RTC time accumulator, isNightTime(), secondsUntilMorning()
 - `health_check.ino` — daily morning health mail with optional snapshot/log

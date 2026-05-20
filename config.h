@@ -69,6 +69,10 @@ void logLine(const char* format, ...);
 #define DEFAULT_SLEEP_END_H     22        // Letzte aktive Stunde (Uhr)
 #define DEFAULT_MAIL_SNAPSHOT  true       // Schnappschuss standardmäßig mitsenden
 #define DEFAULT_MAIL_LOG       false      // Protokoll standardmäßig nicht mitsenden
+#define DEFAULT_MODE            0         // 0 = täglich, 1 = aktiv
+#define DEFAULT_IMAP_HOST       "imap.strato.de"
+#define DEFAULT_IMAP_PORT       993
+#define DEFAULT_IMAP_CMD        "sopobihocam:aktiv"
 
 // --- AP-Konfiguration ---
 #define AP_SSID          "sopobihocam"
@@ -98,6 +102,10 @@ struct Config {
   uint8_t  sleep_end_h;         // Letzte aktive Stunde (0–23), z.B. 22
   bool     mail_snapshot;       // JPEG-Schnappschuss an Health-Mail anhängen
   bool     mail_log;            // Protokoll (log.txt) an Health-Mail anhängen
+  uint8_t  mode;                // 0 = täglich (1× pro Tag), 1 = aktiv (normales Polling)
+  String   imap_host;           // IMAP-Server für Befehlsempfang
+  uint16_t imap_port;           // IMAP-Port (993 = SSL)
+  String   imap_cmd;            // Betreff-String zum Umschalten auf Modus 1
 };
 
 // --- Globale Variablen (extern) ---
@@ -113,6 +121,9 @@ bool sendHealthMail(float batt_v, uint32_t conn_count,
 bool testMailConnection(const String &host, int port,
                         const String &user, const String &pass,
                         String &errorMsg);
+
+// --- IMAP-Funktionen (imap_receiver.cpp) ---
+bool checkImapForCommand();
 
 // --- RTC-Variablen ---
 extern uint32_t rtc_conn_count;      // health_check.ino, auch in stream_server.cpp

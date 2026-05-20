@@ -78,6 +78,12 @@ const char CONFIG_PAGE[] PROGMEM = R"rawliteral(
 
 <!-- Tab 1: Zeitplan -->
 <div class="tab-panel" style="display:none">
+<h2>Betriebsmodus</h2>
+<div class="info">Modus: <b id="mode_label">%MODE_LABEL%</b></div>
+<div id="setmode_section" style="display:%SETMODE_DISPLAY%">
+  <button class="btn-cal" onclick="setDailyMode()" style="margin-top:8px">Zur&uuml;ck auf t&auml;glich</button>
+  <div class="result" id="setmode_result"></div>
+</div>
 <h2>Streaming</h2>
 <label>Wartezeit auf ersten Client (5&ndash;120 Sekunden)</label>
 <input type="number" id="wait_for_client" value="%WAIT_CLIENT%" min="5" max="120">
@@ -131,6 +137,13 @@ const char CONFIG_PAGE[] PROGMEM = R"rawliteral(
 <label style="display:flex;align-items:center;gap:8px;margin:10px 0;cursor:pointer">
   <input type="checkbox" id="mail_log" %MAIL_LOG%> Protokoll mitsenden
 </label>
+<h2>IMAP-Empfang (Befehlsmail)</h2>
+<label>IMAP-Host</label>
+<input type="text" id="imap_host" value="%IMAP_HOST%">
+<label>IMAP-Port</label>
+<input type="number" id="imap_port" value="%IMAP_PORT%" min="1" max="65535">
+<label>Betreff-Befehlsstring (zum Umschalten auf aktiven Modus)</label>
+<input type="text" id="imap_cmd" value="%IMAP_CMD%">
 <button class="btn-cal" onclick="testMail()">Verbindung testen</button>
 <div class="result" id="mail_test_result"></div>
 </div>
@@ -196,6 +209,9 @@ function saveConfig() {
   params.append('sleep_end_h',    document.getElementById('sleep_end_h').value);
   params.append('mail_snapshot',  document.getElementById('mail_snapshot').checked ? '1' : '0');
   params.append('mail_log',       document.getElementById('mail_log').checked ? '1' : '0');
+  params.append('imap_host',      document.getElementById('imap_host').value);
+  params.append('imap_port',      document.getElementById('imap_port').value);
+  params.append('imap_cmd',       document.getElementById('imap_cmd').value);
 
   fetch('/save', { method: 'POST', body: params }).then(r => r.json()).then(d => {
     var el = document.getElementById('status');
@@ -206,6 +222,22 @@ function saveConfig() {
     el.textContent = 'Verbindungsfehler';
     setTimeout(() => { el.textContent = ''; }, 3000);
   });
+}
+
+function setDailyMode() {
+  var el = document.getElementById('setmode_result');
+  el.textContent = '...';
+  fetch('/setmode?mode=0').then(r => r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('mode_label').textContent = 'Täglich (1× pro Tag)';
+      document.getElementById('setmode_section').style.display = 'none';
+      el.textContent = 'Modus gespeichert.';
+      setTimeout(() => { el.textContent = ''; }, 3000);
+    } else {
+      el.textContent = 'Fehler';
+      setTimeout(() => { el.textContent = ''; }, 3000);
+    }
+  }).catch(() => { el.textContent = 'Verbindungsfehler'; });
 }
 
 function resetMailFlag() {
@@ -354,6 +386,12 @@ String buildConfigPage() {
   page.replace("%SLEEP_END_H%",   String(cfg.sleep_end_h));
   page.replace("%MAIL_SNAPSHOT%", cfg.mail_snapshot ? "checked" : "");
   page.replace("%MAIL_LOG%",      cfg.mail_log      ? "checked" : "");
+  page.replace("%IMAP_HOST%",     cfg.imap_host);
+  page.replace("%IMAP_PORT%",     String(cfg.imap_port));
+  page.replace("%IMAP_CMD%",      cfg.imap_cmd);
+  page.replace("%MODE_LABEL%",    cfg.mode == 0 ? "T&auml;glich (1&times; pro Tag)"
+                                                : "Aktiv (alle " + String(cfg.sleep_interval_s) + "s)");
+  page.replace("%SETMODE_DISPLAY%", cfg.mode == 1 ? "block" : "none");
   page.replace("%HEARTBEAT_MS%",  String(cfg.wait_for_client_s * 1000UL / 3));
   page.replace("%FW_VERSION%",    String(FIRMWARE_VERSION));
   page.replace("%LOG_MAX_KB%",    String(LOG_MAX_SIZE / 1024));
@@ -384,6 +422,11 @@ void handleSave() {
   cfg.sleep_end_h        = (uint8_t)constrain(server.arg("sleep_end_h").toInt(),   0, 23);
   cfg.mail_snapshot      = server.arg("mail_snapshot") == "1";
   cfg.mail_log           = server.arg("mail_log")      == "1";
+  cfg.imap_host          = server.arg("imap_host");
+  cfg.imap_port          = (uint16_t)server.arg("imap_port").toInt();
+  cfg.imap_cmd           = server.arg("imap_cmd");
+  if (cfg.imap_port == 0)          cfg.imap_port = DEFAULT_IMAP_PORT;
+  if (cfg.imap_cmd.length() == 0) cfg.imap_cmd  = DEFAULT_IMAP_CMD;
   if (cfg.sleep_start_h >= cfg.sleep_end_h) {
     cfg.sleep_start_h = DEFAULT_SLEEP_START_H;
     cfg.sleep_end_h   = DEFAULT_SLEEP_END_H;
@@ -475,6 +518,20 @@ void handleLed() {
               "{\"ok\":true,\"brightness\":" + String(pct) + "}");
 }
 
+// --- Modus umschalten ---
+void handleSetMode() {
+  lastClientActivity = millis();
+  int m = server.arg("mode").toInt();
+  if (m < 0 || m > 1) {
+    server.send(200, "application/json", "{\"ok\":false,\"error\":\"Ungültiger Modus\"}");
+    return;
+  }
+  cfg.mode = (uint8_t)m;
+  saveConfig();
+  logLine("[WEB] Modus auf %d gesetzt\n", cfg.mode);
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 // --- OTA-Update ---
 
 void handleOTAUpload() {
@@ -519,6 +576,7 @@ void setupWebServer() {
   server.on("/resetmailflag", HTTP_GET,  handleResetMailFlag);
   server.on("/testmail",      HTTP_POST, handleTestMail);
   server.on("/time",          HTTP_GET,  handleTime);
+  server.on("/setmode",       HTTP_GET,  handleSetMode);
   server.on("/update",        HTTP_POST, handleOTAResult, handleOTAUpload);
   server.on("/log",           HTTP_GET,  handleLogDownload);
   server.on("/clearlog",      HTTP_GET,  handleLogClear);

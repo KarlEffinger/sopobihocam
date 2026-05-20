@@ -26,6 +26,10 @@ void loadConfig() {
   cfg.sleep_end_h        = prefs.getUChar("sleep_end_h",   DEFAULT_SLEEP_END_H);
   cfg.mail_snapshot      = prefs.getBool("mail_snapshot",  DEFAULT_MAIL_SNAPSHOT);
   cfg.mail_log           = prefs.getBool("mail_log",       DEFAULT_MAIL_LOG);
+  cfg.mode               = prefs.getUChar("mode",          DEFAULT_MODE);
+  cfg.imap_host          = prefs.getString("imap_host",    DEFAULT_IMAP_HOST);
+  cfg.imap_port          = prefs.getUShort("imap_port",    DEFAULT_IMAP_PORT);
+  cfg.imap_cmd           = prefs.getString("imap_cmd",     DEFAULT_IMAP_CMD);
 
   prefs.end();
 
@@ -40,6 +44,9 @@ void loadConfig() {
     cfg.sleep_start_h = DEFAULT_SLEEP_START_H;
     cfg.sleep_end_h   = DEFAULT_SLEEP_END_H;
   }
+  if (cfg.mode > 1)         cfg.mode      = DEFAULT_MODE;
+  if (cfg.imap_port == 0)   cfg.imap_port = DEFAULT_IMAP_PORT;
+  if (cfg.imap_cmd.length() == 0) cfg.imap_cmd = DEFAULT_IMAP_CMD;
 
   logLine("[NVS] Konfiguration geladen\n");
 }
@@ -64,6 +71,10 @@ void saveConfig() {
   prefs.putUChar("sleep_end_h",   cfg.sleep_end_h);
   prefs.putBool("mail_snapshot",  cfg.mail_snapshot);
   prefs.putBool("mail_log",       cfg.mail_log);
+  prefs.putUChar("mode",          cfg.mode);
+  prefs.putString("imap_host",    cfg.imap_host);
+  prefs.putUShort("imap_port",    cfg.imap_port);
+  prefs.putString("imap_cmd",     cfg.imap_cmd);
 
   prefs.end();
   logLine("[NVS] Konfiguration gespeichert\n");

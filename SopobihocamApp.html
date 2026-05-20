@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sopobihocam</title>
+
+  <!-- PWA: iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sopobihocam">
+  <meta name="theme-color" content="#111111">
+
+  <!-- App-Icon (SVG: Kamera + Sonne) für iOS "Zum Homescreen hinzufügen" -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIyIiBmaWxsPSIjMWExYTJlIi8+PHJlY3QgeD0iMTMiIHk9IjM3IiB3aWR0aD0iNzQiIGhlaWdodD0iNDYiIHJ4PSI3IiBmaWxsPSIjZTk0NTYwIi8+PHJlY3QgeD0iMzMiIHk9IjI2IiB3aWR0aD0iMjIiIGhlaWdodD0iMTQiIHJ4PSI1IiBmaWxsPSIjZTk0NTYwIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSI2MCIgcj0iMTYiIGZpbGw9IiMxYTFhMmUiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjYwIiByPSI5IiBmaWxsPSIjMTExIi8+PGNpcmNsZSBjeD0iNTUiIGN5PSI1NiIgcj0iMyIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC40Ii8+PGNpcmNsZSBjeD0iNzgiIGN5PSIzMCIgcj0iOCIgZmlsbD0iI2ZmZDcwMCIvPjxsaW5lIHgxPSI3OCIgeTE9IjE5IiB4Mj0iNzgiIHkyPSIxNSIgc3Ryb2tlPSIjZmZkNzAwIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9Ijg5IiB5MT0iMzAiIHgyPSI5MyIgeTI9IjMwIiBzdHJva2U9IiNmZmQ3MDAiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iODYiIHkxPSIyMiIgeDI9Ijg5IiB5Mj0iMTkiIHN0cm9rZT0iI2ZmZDcwMCIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSI4NiIgeTE9IjM4IiB4Mj0iODkiIHkyPSI0MSIgc3Ryb2tlPSIjZmZkNzAwIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+">
+
+  <!-- PWA Manifest (eingebettet, für Android Chrome "Zum Startbildschirm") -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Sopobihocam%22%2C%22short_name%22%3A%22Sopobihocam%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23111111%22%2C%22theme_color%22%3A%22%23111111%22%2C%22start_url%22%3A%22.%22%7D">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #111111;
+      --surface: #1a1a2e;
+      --accent:  #e94560;
+      --text:    #eeeeee;
+      --muted:   #888888;
+      --border:  #2e2e2e;
+      --green:   #4caf82;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Screen-System ─────────────────────────────────────── */
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s;
+      /* safe-area für iPhone Notch / Dynamic Island */
+      padding-top: env(safe-area-inset-top, 0);
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .screen.hidden {
+      transform: translateX(100%);
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    .hdr {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hdr-title {
+      font-size: 1.15em;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.4px;
+    }
+
+    .hdr-label {
+      font-size: 0.8em;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3em;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .icon-btn:active { background: var(--border); color: var(--text); }
+    .icon-btn.ok     { color: var(--green); font-size: 1.05em; font-weight: 700; letter-spacing: 0.5px; }
+
+    /* ── Main-Content ──────────────────────────────────────── */
+    #screen-main .body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      gap: 14px;
+      overflow: hidden;
+    }
+
+    /* ── Countdown-Ring ────────────────────────────────────── */
+    #ring-wrap { position: relative; width: 150px; height: 150px; }
+
+    #ring-bg    { fill: none; stroke: var(--surface); stroke-width: 9; }
+    #ring-track { fill: none; stroke: var(--accent);  stroke-width: 9; stroke-linecap: round; }
+
+    #ring-num {
+      font-size: 2em;
+      font-weight: 700;
+      fill: var(--text);
+      dominant-baseline: central;
+      text-anchor: middle;
+    }
+
+    #ring-label {
+      font-size: 0.72em;
+      fill: var(--muted);
+      dominant-baseline: central;
+      text-anchor: middle;
+    }
+
+    /* ── Statustext ────────────────────────────────────────── */
+    #status-line {
+      font-size: 0.88em;
+      color: var(--muted);
+      text-align: center;
+      min-height: 1.3em;
+    }
+
+    /* ── Stream-Bild ───────────────────────────────────────── */
+    #stream-img {
+      max-width: 100%;
+      max-height: calc(100vh - 220px);
+      border-radius: 10px;
+      display: none;
+      object-fit: contain;
+    }
+
+    /* ── Info-Leiste ───────────────────────────────────────── */
+    #info-bar {
+      display: none;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px 20px;
+      background: var(--surface);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 0.9em;
+      width: 100%;
+      max-width: 380px;
+    }
+
+    #batt-val { color: var(--accent); font-weight: 700; }
+
+    #cfg-link {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9em;
+    }
+    #cfg-link:active { color: var(--text); }
+
+    /* ── Buttons ───────────────────────────────────────────── */
+    .btn {
+      padding: 11px 28px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.75; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Einstellungen-Screen ──────────────────────────────── */
+    #screen-settings { background: var(--bg); }
+
+    #screen-settings .body {
+      flex: 1;
+      padding: 24px 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .form-group label {
+      font-size: 0.75em;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+
+    .form-group input {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 1em;
+      padding: 13px 14px;
+      width: 100%;
+      -webkit-appearance: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-group .hint {
+      font-size: 0.78em;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .form-group .hint em {
+      color: #aaa;
+      font-style: normal;
+      font-family: monospace;
+      font-size: 1.05em;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0 -4px;
+    }
+
+    .app-version {
+      text-align: center;
+      color: var(--border);
+      font-size: 0.72em;
+      margin-top: auto;
+      padding-top: 16px;
+    }
+
+    /* ── Error-Banner ──────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: #3a1a1a;
+      color: #f08080;
+      font-size: 0.8em;
+      text-align: center;
+      padding: 7px 16px;
+      border-bottom: 1px solid #5a2a2a;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════ HAUPT-SCREEN ══════════════════════════ -->
+<div id="screen-main" class="screen">
+  <div class="hdr">
+    <span class="hdr-title">Sopobihocam</span>
+    <button class="icon-btn" onclick="showSettings()" title="Einstellungen" aria-label="Einstellungen">&#9881;</button>
+  </div>
+  <div id="error-banner">Keine Kamera-Adresse konfiguriert – bitte Einstellungen öffnen.</div>
+
+  <div class="body">
+
+    <!-- Warten / Countdown -->
+    <div id="waiting-view" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+      <div id="ring-wrap">
+        <svg viewBox="0 0 150 150" width="150" height="150" style="display:block;">
+          <circle id="ring-bg"    cx="75" cy="75" r="64"/>
+          <circle id="ring-track" cx="75" cy="75" r="64"
+            transform="rotate(-90 75 75)"
+            stroke-dasharray="402.1"
+            stroke-dashoffset="0"/>
+          <text id="ring-num"   x="75" y="69">–</text>
+          <text id="ring-label" x="75" y="95">Sekunden</text>
+        </svg>
+      </div>
+      <div id="status-line">Verbinde...</div>
+    </div>
+
+    <!-- Stream-Bild (wird bei Verbindung eingeblendet) -->
+    <img id="stream-img" alt="Live-Stream">
+
+    <!-- Info-Leiste (Akku, Config-Link, Verlassen) -->
+    <div id="info-bar">
+      <span>&#128267; <span id="batt-val">--</span> V</span>
+      <a id="cfg-link" href="#" target="_blank">&#9881; Konfiguration</a>
+      <button class="btn btn-secondary" onclick="disconnectStream()"
+        style="padding:7px 18px;font-size:0.85em;">&#x2715; Verlassen</button>
+    </div>
+
+    <!-- Wieder-verbinden Button (nach manuellem Trennen) -->
+    <button id="reconnect-btn" class="btn btn-primary"
+      onclick="reconnect()" style="display:none;">&#x21BA; Wieder verbinden</button>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════ EINSTELLUNGEN-SCREEN ══════════════════════════ -->
+<div id="screen-settings" class="screen hidden">
+  <div class="hdr">
+    <span class="hdr-label">Einstellungen</span>
+    <button class="icon-btn ok" onclick="saveSettings()">OK &#10003;</button>
+  </div>
+
+  <div class="body">
+
+    <div class="form-group">
+      <label>Kamera-Adresse</label>
+      <input id="cfg-host" type="text" inputmode="url"
+        autocorrect="off" autocapitalize="off" spellcheck="false"
+        placeholder="sopobihocam.fritz.box">
+      <span class="hint">
+        IP-Adresse oder Hostname der Kamera im Heimnetz.<br>
+        Beispiele: <em>192.168.178.50</em> oder <em>sopobihocam.fritz.box</em>
+      </span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="form-group">
+      <label>Schlafintervall (Sekunden)</label>
+      <input id="cfg-sleep" type="number" inputmode="numeric"
+        min="10" max="3600" value="120">
+      <span class="hint">
+        Weckintervall der Kamera, wie in der Kamera-Konfiguration eingestellt.<br>
+        Wird für den Countdown-Ring verwendet. Standard: <em>120</em>
+      </span>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn btn-primary" onclick="saveSettings()"
+      style="width:100%;padding:14px;">Speichern</button>
+
+    <div class="app-version">Sopobihocam App &nbsp;·&nbsp; v1.0</div>
+  </div>
+</div>
+
+
+<script>
+// ── Konfiguration aus localStorage ────────────────────────────────────────────
+var camHost  = localStorage.getItem('cam_host')  || '';
+var sleepIvl = parseInt(localStorage.getItem('sleep_ivl') || '120', 10);
+
+// ── DOM-Referenzen ─────────────────────────────────────────────────────────────
+var ringTrack    = document.getElementById('ring-track');
+var ringNum      = document.getElementById('ring-num');
+var ringLabel    = document.getElementById('ring-label');
+var statusLine   = document.getElementById('status-line');
+var streamImg    = document.getElementById('stream-img');
+var infoBar      = document.getElementById('info-bar');
+var waitingView  = document.getElementById('waiting-view');
+var reconnectBtn = document.getElementById('reconnect-btn');
+var errorBanner  = document.getElementById('error-banner');
+
+// Kreisumfang für r=64: 2π×64 ≈ 402.1
+var CIRC = 2 * Math.PI * 64;
+
+// ── State ──────────────────────────────────────────────────────────────────────
+var countdownVal   = sleepIvl;
+var countdownTimer = null;
+var battTimer      = null;
+var pinging        = false;
+
+// ── App-Start ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function () {
+  ringTrack.setAttribute('stroke-dasharray', CIRC.toFixed(1));
+  if (!camHost) {
+    errorBanner.style.display = 'block';
+    setRingIdle();
+    statusLine.textContent = 'Keine Kamera konfiguriert.';
+    showSettings();
+  } else {
+    startSession();
+  }
+});
+
+// ── Screens ────────────────────────────────────────────────────────────────────
+function showSettings() {
+  document.getElementById('cfg-host').value  = camHost;
+  document.getElementById('cfg-sleep').value = sleepIvl;
+  document.getElementById('screen-settings').classList.remove('hidden');
+}
+
+function hideSettings() {
+  document.getElementById('screen-settings').classList.add('hidden');
+}
+
+function saveSettings() {
+  var newHost  = document.getElementById('cfg-host').value.trim();
+  var newSleep = Math.max(10, parseInt(document.getElementById('cfg-sleep').value, 10) || 120);
+
+  if (!newHost) {
+    document.getElementById('cfg-host').focus();
+    return;
+  }
+
+  var hostChanged  = (newHost  !== camHost);
+  var sleepChanged = (newSleep !== sleepIvl);
+
+  camHost  = newHost;
+  sleepIvl = newSleep;
+  localStorage.setItem('cam_host',  camHost);
+  localStorage.setItem('sleep_ivl', String(sleepIvl));
+
+  hideSettings();
+  errorBanner.style.display = 'none';
+
+  if (hostChanged || sleepChanged) {
+    stopSession();
+    startSession();
+  }
+}
+
+// ── Session (Countdown + Ping-Schleife) ────────────────────────────────────────
+function startSession() {
+  reconnectBtn.style.display = 'none';
+  startCountdown();
+  ping();
+}
+
+function stopSession() {
+  pinging = false;
+  clearInterval(countdownTimer);
+  clearInterval(battTimer);
+  countdownTimer = null;
+  battTimer = null;
+
+  streamImg.onerror = null;
+  streamImg.src = '';
+  streamImg.style.display = 'none';
+  infoBar.style.display   = 'none';
+  waitingView.style.display = 'flex';
+}
+
+// ── Countdown-Ring ─────────────────────────────────────────────────────────────
+function startCountdown() {
+  countdownVal = sleepIvl;
+  clearInterval(countdownTimer);
+
+  statusLine.textContent = 'Warte auf Kamera...';
+  updateRing(countdownVal);
+
+  countdownTimer = setInterval(function () {
+    countdownVal--;
+    if (countdownVal <= 0) countdownVal = sleepIvl;
+    updateRing(countdownVal);
+  }, 1000);
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+}
+
+function updateRing(val) {
+  var fraction = Math.max(0, Math.min(1, val / sleepIvl));
+  ringTrack.setAttribute('stroke-dashoffset', (CIRC * (1 - fraction)).toFixed(2));
+  ringNum.textContent   = val > 0 ? String(val) : '…';
+  ringLabel.textContent = 'Sekunden';
+}
+
+function setRingIdle() {
+  ringTrack.setAttribute('stroke-dashoffset', CIRC.toFixed(2));
+  ringNum.textContent   = '–';
+  ringLabel.textContent = '';
+}
+
+// ── Ping (prüft, ob Kamera wach ist) ──────────────────────────────────────────
+function ping() {
+  if (!camHost) return;
+  pinging = true;
+
+  fetch('http://' + camHost + ':81/jpg?' + Date.now(), {
+    signal: AbortSignal.timeout(2000)
+  })
+  .then(function (r) {
+    if (!pinging) return;
+    if (r.ok) {
+      showStream();
+    } else {
+      setTimeout(ping, 3000);
+    }
+  })
+  .catch(function () {
+    if (!pinging) return;
+    setTimeout(ping, 3000);
+  });
+}
+
+// ── Stream ─────────────────────────────────────────────────────────────────────
+function showStream() {
+  stopCountdown();
+  statusLine.textContent    = '';
+  document.title            = 'live – SoPoBiHoCam';
+  waitingView.style.display = 'none';
+  streamImg.style.display   = 'block';
+  infoBar.style.display     = 'flex';
+  reconnectBtn.style.display = 'none';
+
+  document.getElementById('cfg-link').href = 'http://' + camHost;
+  streamImg.src = 'http://' + camHost + ':81/stream';
+
+  fetchBattery();
+  battTimer = setInterval(fetchBattery, 30000);
+
+  streamImg.onerror = function () {
+    clearInterval(battTimer);
+    document.title = 'Sopobihocam';
+    streamImg.onerror = null;
+    streamImg.src = '';
+    streamImg.style.display = 'none';
+    infoBar.style.display   = 'none';
+    waitingView.style.display = 'flex';
+    statusLine.textContent  = 'Verbindung getrennt, warte neu...';
+    startCountdown();
+    setTimeout(ping, 3000);
+  };
+}
+
+function disconnectStream() {
+  pinging = false;
+  stopSession();
+  stopCountdown();
+  setRingIdle();
+  document.title = 'Sopobihocam';
+  statusLine.textContent = 'Getrennt.';
+  reconnectBtn.style.display = 'inline-block';
+}
+
+function reconnect() {
+  reconnectBtn.style.display = 'none';
+  pinging = false;          // vorherige Ping-Kette abbrechen
+  startSession();
+}
+
+// ── Akku ───────────────────────────────────────────────────────────────────────
+function fetchBattery() {
+  fetch('http://' + camHost + '/battery')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      document.getElementById('batt-val').textContent = d.voltage.toFixed(2);
+    })
+    .catch(function () {});
+}
+</script>
+</body>
+</html>

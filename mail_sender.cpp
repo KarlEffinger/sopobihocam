@@ -95,6 +95,23 @@ bool sendWarningMail(float batt_v) {
   return false;
 }
 
+// Hilfsfunktion: URL-Enkodierung eines Strings (für mailto-Links im HTML-Body)
+static String urlEncode(const String &s) {
+  String out = "";
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+      out += c;
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", (unsigned char)c);
+      out += buf;
+    }
+  }
+  return out;
+}
+
 // Tägliche Health-Mail senden (mit optionalem JPEG-Snapshot und/oder Protokoll-Anhang)
 bool sendHealthMail(float batt_v, uint32_t conn_count,
                     const uint8_t *jpg_buf, size_t jpg_len,
@@ -109,10 +126,41 @@ bool sendHealthMail(float batt_v, uint32_t conn_count,
   msg.headers.add(rfc822_from, "Sopobihocam <" + cfg.mail_user + ">");
   msg.headers.add(rfc822_to, cfg.mail_to);
 
+  // Modus-Text für Plaintext und HTML
+  const char *modeLabel = (cfg.mode == 0) ? "Täglich (1x pro Tag)" : "Aktiv (regelmäßiges Polling)";
+
+  // Plaintext-Fallback
   String body = "Sopobihocam – täglicher Status-Bericht\r\n\r\n"
                 "Akkuspannung:  " + String(batt_v, 2) + " V\r\n"
-                "Verbindungen:  " + String(conn_count) + " (seit letzter Mail)\r\n";
+                "Verbindungen:  " + String(conn_count) + " (seit letzter Mail)\r\n"
+                "Modus:         " + modeLabel + "\r\n";
   msg.text.body(body);
+
+  // HTML-Body mit optionalem mailto-Link zum Umschalten auf Modus 1
+  String htmlBody = "<!DOCTYPE html><html><body style=\"font-family:Arial,sans-serif;color:#222;\">"
+                    "<h2 style=\"color:#2a7ae2;\">Sopobihocam &ndash; t&auml;glicher Status</h2>"
+                    "<table style=\"border-collapse:collapse;\">"
+                    "<tr><td style=\"padding:4px 12px 4px 0;\"><b>Akkuspannung</b></td>"
+                    "<td style=\"padding:4px 0;\">" + String(batt_v, 2) + " V</td></tr>"
+                    "<tr><td style=\"padding:4px 12px 4px 0;\"><b>Verbindungen</b></td>"
+                    "<td style=\"padding:4px 0;\">" + String(conn_count) + " (seit letzter Mail)</td></tr>"
+                    "<tr><td style=\"padding:4px 12px 4px 0;\"><b>Modus</b></td>"
+                    "<td style=\"padding:4px 0;\">" + modeLabel + "</td></tr>"
+                    "</table>";
+
+  // mailto-Link nur im täglichen Modus (Modus 0) anzeigen
+  if (cfg.mode == 0) {
+    String encodedCmd = urlEncode(cfg.imap_cmd);
+    htmlBody += "<p style=\"margin-top:16px;\">"
+                "<a href=\"mailto:" + cfg.mail_user + "?subject=" + encodedCmd + "\""
+                " style=\"background:#2a7ae2;color:#fff;padding:10px 20px;"
+                "border-radius:4px;text-decoration:none;font-size:0.95em;\">"
+                "&rarr; Auf regelm&auml;&szlig;iges Aufwachen umschalten"
+                "</a></p>";
+  }
+
+  htmlBody += "</body></html>";
+  msg.html.body(htmlBody);
 
   if (jpg_buf && jpg_len > 0) {
     Attachment att;
